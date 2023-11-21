@@ -12,12 +12,12 @@ RUN mvn dependency:resolve -fail-never
 COPY src /opt/shipping/src/
 RUN mvn package
 
-RUN wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v1.14.0/opentelemetry-javaagent.jar -O /opt/shipping/opentelemetry-javaagent-all.jar
+RUN wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v1.32.0/opentelemetry-javaagent.jar -O /opt/shipping/opentelemetry-javaagent-all.jar
 
 #
 # Run
 #
-FROM openjdk:18-jdk
+FROM openjdk:21-jdk
 
 EXPOSE 8080
 
@@ -30,4 +30,4 @@ ENV DB_HOST=mysql
 COPY --from=build /opt/shipping/target/shipping-0.1.175.jar shipping.jar
 COPY --from=build /opt/shipping/opentelemetry-javaagent-all.jar opentelemetry-javaagent-all.jar
 
-CMD [ "java", "-Xmn256m", "-Xmx768m", "-javaagent:opentelemetry-javaagent-all.jar", "-jar", "shipping.jar" ]
+CMD [ "java", "-Xmx256m", "-Xmx768m", "-javaagent:opentelemetry-javaagent-all.jar", "-jar", "shipping.jar" ]

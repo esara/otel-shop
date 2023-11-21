@@ -20,7 +20,7 @@ services:
       <<: *logging
 
   rabbitmq:
-    image: rabbitmq:3.8-management-alpine
+    image: rabbitmq:3.12
     networks:
       app-network:
     logging:
@@ -74,7 +74,7 @@ services:
       SHIPPING_HOST: shipping
       RATINGS_HOST: ratings
       USER_HOST: user
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:?No OpenTelemetry collector specified via OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://${OTEL_EXPORTER_OTLP_ENDPOINT:?No OpenTelemetry collector specified via OTEL_EXPORTER_OTLP_ENDPOINT}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:?No OpenTelemetry headers specified via OTEL_EXPORTER_OTLP_HEADERS}
       OTEL_SERVICE_NAME: otel-shop-front
     volumes:

@@ -2,12 +2,16 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Release.Name }}-ratings
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "80"
+    prometheus.io/path: "/metrics"
   labels:
+    app.kubernetes.io/name: otel-shop
     service: {{ .Release.Name }}-ratings
 spec:
   ports:
   - name: http
     port: 80
-    targetPort: 80
   selector:
     service: {{ .Release.Name }}-ratings

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -19,15 +21,11 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	"go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
-
-	global "go.opentelemetry.io/otel/metric/global"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
 	ec2Detector "go.opentelemetry.io/contrib/detectors/aws/ec2"
@@ -39,6 +37,9 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/streadway/amqp"
 )
 
@@ -242,16 +243,23 @@ func initProvider() func() {
 	metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
 	handleErr(err, "failed to create metric exporter")
 
-	selector := simple.NewWithInexpensiveDistribution()
-	processor := basic.NewFactory(selector, metricExporter)
-
-	cont := controller.New(processor, controller.WithExporter(metricExporter), controller.WithCollectPeriod(time.Second*1),
-		controller.WithResource(res),
+	// Create a meter provider.
+	// You can pass this instance directly to your instrumented code if it accepts a MeterProvider instance.
+	meterProvider := metric.NewMeterProvider(
+		metric.WithResource(res),
+		metric.WithReader(metric.NewPeriodicReader(metricExporter)),
 	)
-	err = cont.Start(ctx)
-	handleErr(err, "failed to start metric provider")
+	// Handle shutdown properly so that nothing leaks.
+	defer func() {
+		if err := meterProvider.Shutdown(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
-	global.SetMeterProvider(cont)
+	// Register as global meter provider so that it can be used via otel.Meter and accessed using otel.GetMeterProvider.
+	// Most instrumentation libraries use the global meter provider as default.
+	// If the global meter provider is not set then a no-op implementation is used, which fails to generate data.
+	otel.SetMeterProvider(meterProvider)
 
 	err = runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
 	handleErr(err, "failed to start runtime instrumentation")
@@ -325,6 +333,35 @@ func main() {
 			}
 		}
 	}()
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	prometheus.Unregister(collectors.NewGoCollector())
+	prometheus.MustRegister(collectors.NewGoCollector(
+		collectors.WithGoCollectorRuntimeMetrics(collectors.GoRuntimeMetricsRule{Matcher: regexp.MustCompile("/.*")}),
+	))
+
+	mux.Handle("/metrics", promhttp.HandlerFor(prometheus.DefaultGatherer,
+		promhttp.HandlerOpts{
+			EnableOpenMetrics: true,
+		},
+	))
+
+	server := &http.Server{Addr: fmt.Sprintf(":%v", 8080), Handler: mux}
+	go func() {
+		log.Println(fmt.Sprintf("starting webserver at port %v", 8080))
+		err := server.ListenAndServe()
+
+		if err != nil {
+			log.Println("webserver error", err)
+		}
+	}()
+
+	defer server.Shutdown(context.TODO())
 
 	log.Println("Waiting for messages")
 	select {}

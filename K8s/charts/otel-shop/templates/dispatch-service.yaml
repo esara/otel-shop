@@ -4,13 +4,16 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Release.Name }}-dispatch
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
   labels:
+    app.kubernetes.io/name: "otel-shop"
     service: {{ .Release.Name }}-dispatch
 spec:
-  clusterIP: None
   ports:
-  - name: headless
-    port: 55555
-    targetPort: 0
+  - name: http
+    port: 8080
   selector:
     service: {{ .Release.Name }}-dispatch

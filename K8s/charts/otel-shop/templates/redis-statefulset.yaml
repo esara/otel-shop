@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
+  name: {{ .Release.Name }}-redis
   labels:
     service: {{ .Release.Name }}-redis
-  name: {{ .Release.Name }}-redis
 spec:
   replicas: 1
   selector:
@@ -20,7 +20,7 @@ spec:
       {{ end }}
       containers:
       - name: {{ .Release.Name }}-redis
-        image: redis:4.0.6
+        image: redis:6.2-alpine
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         ports:
         - containerPort: 6379

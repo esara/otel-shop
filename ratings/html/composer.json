@@ -11,6 +11,7 @@
         "monolog/monolog": "^2.4.0",
         "open-telemetry/opentelemetry": "^0.0.10",
         "open-telemetry/opentelemetry-php-contrib": "^0.0.4",
+        "promphp/prometheus_client_php": "^2.6",
         "psr/log": "*",
         "symfony/config": "^6.0",
         "symfony/dependency-injection": "^6.0",

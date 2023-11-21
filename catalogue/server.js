@@ -4,6 +4,7 @@ const mongoObjectID = require('mongodb').ObjectID;
 const bodyParser = require('body-parser');
 const express = require('express');
 const logger = require('pino')()
+const promClient = require('prom-client');
 const pinoHttp = require('pino-http')()
 const { countAllRequests } = require("./monitoring");
 
@@ -15,13 +16,25 @@ var mongoConnected = false;
 const app = express();
 
 app.use(pinoHttp);
+const httpRequestDurationMicroseconds = new promClient.Histogram({
+    name: 'http_request_duration_seconds',
+    help: 'Duration of HTTP requests in seconds',
+    labelNames: ['method', 'route', 'code'],
+    buckets: [0.1, 0.5, 1, 5, 10, 30],
+});
 
 app.use(countAllRequests());
 
 app.use((req, res, next) => {
+    const start = Date.now();
     res.set('Timing-Allow-Origin', '*');
     res.set('Access-Control-Allow-Origin', '*');
-
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        httpRequestDurationMicroseconds
+            .labels(req.method, req.path, res.statusCode)
+            .observe(duration / 1000);
+    });
     next();
 });
 
@@ -57,6 +70,11 @@ app.get('/health-check', (req, res) => {
     }
 
     res.json(stat);
+});
+
+app.get('/metrics', (req, res) => {
+    res.set('Content-Type', promClient.register.contentType);
+    res.send(promClient.register.metrics());
 });
 
 // all products

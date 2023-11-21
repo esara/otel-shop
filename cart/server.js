@@ -11,6 +11,12 @@ const { countAllRequests } = require("./monitoring");
 const promClient = require('prom-client');
 const Registry = promClient.Registry;
 const register = new Registry();
+const httpRequestDurationMicroseconds = new promClient.Histogram({
+    name: 'http_request_duration_seconds',
+    help: 'Duration of HTTP requests in seconds',
+    labelNames: ['method', 'route', 'code'],
+    buckets: [0.1, 0.5, 1, 5, 10, 30],
+});
 const counter = new promClient.Counter({
     name: 'items_added',
     help: 'running count of items added to cart',
@@ -31,9 +37,15 @@ app.use(pinoHttp);
 app.use(countAllRequests())
 
 app.use((req, res, next) => {
+    const start = Date.now();
     res.set('Timing-Allow-Origin', '*');
     res.set('Access-Control-Allow-Origin', '*');
-
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        httpRequestDurationMicroseconds
+            .labels(req.method, req.path, res.statusCode)
+            .observe(duration / 1000);
+    });
     next();
 });
 
@@ -73,7 +85,7 @@ app.get('/health-check', (req, res) => {
 
 // Prometheus
 app.get('/metrics', (req, res) => {
-    res.header('Content-Type', 'text/plain');
+    res.set('Content-Type', promClient.register.contentType);
     res.send(register.metrics());
 });
 
